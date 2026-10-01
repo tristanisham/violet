@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"charm.land/log/v2"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/tristanisham/violet/cli"
 	"github.com/tristanisham/violet/meta"
 	opts "github.com/urfave/cli/v3"
 )
@@ -36,6 +38,10 @@ var App = &opts.Command{
 		},
 	},
 	Before: func(ctx context.Context, c *opts.Command) (context.Context, error) {
+		if c.Args().First() == "init" {
+			return ctx, nil
+		}
+
 		configPath := c.String("config")
 		if len(configPath) == 0 {
 			cwd, err := os.Getwd()
@@ -69,7 +75,18 @@ var App = &opts.Command{
 
 		return nil
 	},
-	Commands: []*opts.Command{},
+	Commands: []*opts.Command{
+		{
+			Name:   "init",
+			Usage:  "Create a violet.toml configuration stub in the current directory",
+			Action: cli.InitHandler,
+		},
+		{
+			Name:   "server",
+			Usage:  "Start the Violet server",
+			Action: cli.ServerHandler,
+		},
+	},
 }
 
 func main() {
