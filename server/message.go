@@ -1,13 +1,11 @@
 package server
 
-type Subject int
-
-const (
-	SubjectUnknown Subject = iota
-	SubjectChat
-)
+import "github.com/tristanisham/violet/server/ai"
 
 type Message interface {
-	Subject() Subject
+	Subject() ai.Subject
+	Recipiant() string
 	Content() any
 }
+
+var _ Message = ai.ChatRequest{}

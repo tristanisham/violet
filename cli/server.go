@@ -20,7 +20,7 @@ func ServerStartHandler(ctx context.Context, c *opts.Command) error {
 		return meta.ErrStaleSettings
 	}
 
-	s := server.NewServer()
+	s := server.NewEngine()
 	c.Root().Metadata["server"] = s
 
 	if err := s.Start(settings); err != nil {

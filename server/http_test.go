@@ -11,9 +11,9 @@ import (
 )
 
 func TestHTTPEngineLifecycle(t *testing.T) {
-	s := NewServer()
+	s := NewEngine()
 	defer s.Stop()
-	router := s.httpRouter(&meta.Settings{Config: &meta.Config{ContainerSock: "/tmp/container.sock"}})
+	router := s.httpRouter(&meta.Settings{Config: &meta.Config{ContainerSock: "/tmp/container.sock", ProjectDir: t.TempDir()}})
 	for _, step := range []struct {
 		method  string
 		path    string
@@ -47,7 +47,7 @@ func TestHTTPEngineLifecycle(t *testing.T) {
 
 func TestHTTPStartMissingSettings(t *testing.T) {
 	for _, settings := range []*meta.Settings{nil, {}, {Config: &meta.Config{}}} {
-		s := NewServer()
+		s := NewEngine()
 		w := httptest.NewRecorder()
 		s.httpRouter(settings).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/start", nil))
 		if w.Code != http.StatusBadRequest || s.Status() {
@@ -57,8 +57,8 @@ func TestHTTPStartMissingSettings(t *testing.T) {
 }
 
 func TestConcurrentEngineLifecycle(t *testing.T) {
-	s := NewServer()
-	settings := &meta.Settings{Config: &meta.Config{ContainerSock: "/tmp/container.sock"}}
+	s := NewEngine()
+	settings := &meta.Settings{Config: &meta.Config{ContainerSock: "/tmp/container.sock", ProjectDir: t.TempDir()}}
 	var wg sync.WaitGroup
 	for range 20 {
 		wg.Go(func() {
