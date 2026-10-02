@@ -17,7 +17,7 @@ type Model struct {
 type Family map[string]Model
 
 type Config struct {
-	ContainerSock string            `json:"container_sock" toml:"container_sock"`
+	ContainerSock string            `json:"container_socket" toml:"container_socket"`
 	Models        map[string]Family `json:"models" toml:"models"`
 }
 

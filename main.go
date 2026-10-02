@@ -82,9 +82,31 @@ var App = &opts.Command{
 			Action: cli.InitHandler,
 		},
 		{
+			Name:   "upgrade",
+			Usage:  "Upgrade Violet",
+			Action: cli.UpgradeHandler,
+		},
+		{
 			Name:   "server",
-			Usage:  "Start the Violet server",
-			Action: cli.ServerHandler,
+			Usage:  "Manage the Violet server",
+			Action: nil,
+			Commands: []*opts.Command{
+				{
+					Name:   "start",
+					Usage:  "Start the Violet server",
+					Action: cli.ServerStartHandler,
+				},
+				{
+					Name:   "status",
+					Usage:  "Show the Violet server status",
+					Action: cli.ServerStatusHandler,
+				},
+				{
+					Name:   "stop",
+					Usage:  "Stop the Violet server",
+					Action: cli.ServerStopHandler,
+				},
+			},
 		},
 	},
 }

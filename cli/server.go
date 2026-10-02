@@ -3,9 +3,40 @@ package cli
 import (
 	"context"
 
+	"github.com/tristanisham/violet/meta"
+	"github.com/tristanisham/violet/server"
+
 	opts "github.com/urfave/cli/v3"
 )
 
-func ServerHandler(ctx context.Context, c *opts.Command) error {
+// func ServerHandler(ctx context.Context, c *opts.Command) error {
+// 	return nil
+// }
+
+func ServerStartHandler(ctx context.Context, c *opts.Command) error {
+	settings, ok := c.Root().Metadata["settings"].(*meta.Settings)
+	if !ok || settings == nil {
+		return meta.ErrStaleSettings
+	}
+
+	s := server.NewServer()
+	return s.Start(settings)
+}
+
+func ServerStatusHandler(ctx context.Context, c *opts.Command) error {
+	settings, ok := c.Root().Metadata["settings"].(*meta.Settings)
+	if !ok || settings == nil {
+		return meta.ErrStaleSettings
+	}
+
+	return nil
+}
+
+func ServerStopHandler(ctx context.Context, c *opts.Command) error {
+	settings, ok := c.Root().Metadata["settings"].(*meta.Settings)
+	if !ok || settings == nil {
+		return meta.ErrStaleSettings
+	}
+
 	return nil
 }
