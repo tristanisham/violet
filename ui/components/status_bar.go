@@ -13,7 +13,7 @@ func StatusBar(width int, left, right string, styles Styles) string {
 	}
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 2
 	content := " " + left + " "
-	if gap > 0 {
+	if gap >= 0 {
 		content += strings.Repeat(" ", gap) + right
 	}
 	return styles.Status.Width(width).MaxHeight(1).Render(ansi.Truncate(content, width, ""))

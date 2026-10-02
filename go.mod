@@ -13,13 +13,12 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/pelletier/go-toml/v2 v2.4.3
-	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/urfave/cli/v3 v3.14.0
 	gorm.io/gorm v1.31.2
 )
 
 require (
-	charm.land/bubbles/v2 v2.2.1 // indirect
+	charm.land/bubbles/v2 v2.2.1
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20261001125412-878653296cfd // indirect

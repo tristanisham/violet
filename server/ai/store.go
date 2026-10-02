@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
@@ -45,6 +47,9 @@ func OpenStore(projectDir string) (*Store, error) {
 	store := &Store{db: db}
 	sqlDB, err := db.DB()
 	if err != nil {
+		if closer, ok := db.ConnPool.(interface{ Close() error }); ok {
+			closer.Close()
+		}
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1)
@@ -60,6 +65,25 @@ func (s *Store) Save(ctx context.Context, chat *ChatRequest) error {
 		return fmt.Errorf("chat request is nil")
 	}
 	return s.db.WithContext(ctx).Save(chat).Error
+}
+
+// ErrChatExists reports that Create was given an ID that is already stored.
+var ErrChatExists = errors.New("chat request already exists")
+
+// Create inserts a new chat and never overwrites an existing one, so a client
+// cannot replace another conversation by reusing its request ID.
+func (s *Store) Create(ctx context.Context, chat *ChatRequest) error {
+	if chat == nil {
+		return fmt.Errorf("chat request is nil")
+	}
+	result := s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(chat)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrChatExists
+	}
+	return nil
 }
 
 func (s *Store) Get(ctx context.Context, id uuid.UUID) (*ChatRequest, error) {

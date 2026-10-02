@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	ignore "github.com/sabhiram/go-gitignore"
 )
 
 // FileResolver searches beneath an absolute root without following symlinks.
@@ -39,6 +38,31 @@ func NewFileResolver(root string) (*FileResolver, error) {
 	return &FileResolver{root: root}, nil
 }
 
+// Bind each search to the checked directory, including when its path is replaced.
+func openFileResolverRoot(name string) (*os.Root, error) {
+	info, err := os.Lstat(name)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("file resolver root %q is not a directory", name)
+	}
+	root, err := os.OpenRoot(name)
+	if err != nil {
+		return nil, err
+	}
+	opened, err := root.Stat(".")
+	if err != nil {
+		root.Close()
+		return nil, err
+	}
+	if !os.SameFile(info, opened) {
+		root.Close()
+		return nil, fmt.Errorf("file resolver root %q changed during search", name)
+	}
+	return root, nil
+}
+
 // Candidates ranks fuzzy matches by exact path, exact basename, substring,
 // then subsequence, with lexical ties. Glob queries are case-sensitive and
 // lexically sorted. Absolute paths and any .. component yield no candidates.
@@ -64,8 +88,13 @@ func (r *FileResolver) Candidates(ctx context.Context, query string) ([]string, 
 			return nil, err
 		}
 	}
+	root, err := openFileResolverRoot(r.root)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
 	files := []string{}
-	if err := r.walk(ctx, "", nil, &files); err != nil {
+	if err := r.walk(ctx, root, "", nil, &files); err != nil {
 		return nil, err
 	}
 	type match struct {
@@ -125,24 +154,25 @@ func (r *FileResolver) Resolve(ctx context.Context, query string) ([]string, err
 }
 
 type fileIgnoreRule struct {
-	scope   string
-	matcher *ignore.GitIgnore
-	negated bool
+	scope         string
+	pattern       string
+	negated       bool
+	directoryOnly bool
+	anchored      bool
 }
 
-func readFileIgnoreRules(ctx context.Context, filename, scope string) ([]fileIgnoreRule, error) {
-	info, err := os.Lstat(filename)
+func readFileIgnoreRules(ctx context.Context, root *os.Root, filename, scope string) ([]fileIgnoreRule, error) {
+	info, err := root.Lstat(filename)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("stat .gitignore %q: %w", filename, err)
 	}
-	// Never open a symlink or special file named .gitignore.
 	if !info.Mode().IsRegular() {
 		return nil, nil
 	}
-	contents, err := os.ReadFile(filename)
+	contents, err := root.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("read .gitignore %q: %w", filename, err)
 	}
@@ -151,50 +181,65 @@ func readFileIgnoreRules(ctx context.Context, filename, scope string) ([]fileIgn
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		line = strings.TrimRight(line, "\r")
-		if strings.HasPrefix(line, "#") {
-			continue
+		if rule := parseFileIgnoreRule(line, scope); rule.pattern != "" {
+			rules = append(rules, rule)
 		}
-		line = strings.Trim(line, " ")
-		negated := strings.HasPrefix(line, "!")
-		if negated {
-			line = strings.TrimPrefix(line, "!")
-		}
-		if line == "" {
-			continue
-		}
-		// A slash within a pattern anchors it to this ignore file's directory.
-		// Keep the final slash: matching directories with a slash distinguishes
-		// directory-only rules from ordinary files with the same name.
-		if strings.Contains(strings.TrimSuffix(line, "/"), "/") && !strings.HasPrefix(line, "/") {
-			line = "/" + line
-		}
-		// Compile negations as positive patterns: MatchesPathHow cannot report
-		// a lone negation matching an inherited rule from a parent file.
-		rules = append(rules, fileIgnoreRule{scope, ignore.CompileIgnoreLines(line), negated})
 	}
 	return rules, nil
 }
 
-func fileIgnored(name string, directory bool, rules []fileIgnoreRule) bool {
-	if directory {
-		name += "/"
-	}
-	ignored := false
-	for _, rule := range rules {
-		if strings.HasPrefix(name, rule.scope) && rule.matcher.MatchesPath(strings.TrimPrefix(name, rule.scope)) {
-			ignored = !rule.negated
+func parseFileIgnoreRule(line, scope string) fileIgnoreRule {
+	line = strings.TrimSuffix(line, "\r")
+	// Git preserves leading spaces and escaped trailing spaces.
+	for strings.HasSuffix(line, " ") {
+		backslashes := 0
+		for i := len(line) - 2; i >= 0 && line[i] == '\\'; i-- {
+			backslashes++
 		}
+		if backslashes%2 != 0 {
+			break
+		}
+		line = strings.TrimSuffix(line, " ")
 	}
-	return ignored
+	if line == "" || strings.HasPrefix(line, "#") {
+		return fileIgnoreRule{}
+	}
+	rule := fileIgnoreRule{scope: scope, negated: strings.HasPrefix(line, "!")}
+	if rule.negated {
+		line = strings.TrimPrefix(line, "!")
+	}
+	rule.directoryOnly = strings.HasSuffix(line, "/")
+	line = strings.TrimSuffix(line, "/")
+	rule.anchored = strings.Contains(line, "/")
+	rule.pattern = strings.TrimPrefix(line, "/")
+	return rule
 }
 
-func (r *FileResolver) walk(ctx context.Context, relative string, rules []fileIgnoreRule, files *[]string) error {
+func fileIgnored(name string, directory bool, rules []fileIgnoreRule) bool {
+	// Ancestors were already checked before descent. Match this entry only:
+	// re-including a directory must not re-include its ignored children.
+	for i := len(rules) - 1; i >= 0; i-- {
+		rule := rules[i]
+		if rule.directoryOnly && !directory || !strings.HasPrefix(name, rule.scope) {
+			continue
+		}
+		target := strings.TrimPrefix(name, rule.scope)
+		if !rule.anchored {
+			target = path.Base(target)
+		}
+		if matched, _ := doublestar.Match(rule.pattern, target); matched {
+			return !rule.negated
+		}
+	}
+	return false
+}
+
+func (r *FileResolver) walk(ctx context.Context, root *os.Root, relative string, rules []fileIgnoreRule, files *[]string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	directory := filepath.Join(r.root, filepath.FromSlash(relative))
-	entries, err := os.ReadDir(directory)
+	directory := path.Join(".", relative)
+	entries, err := fs.ReadDir(root.FS(), directory)
 	if err != nil {
 		if relative != "" && os.IsPermission(err) {
 			return nil
@@ -206,7 +251,7 @@ func (r *FileResolver) walk(ctx context.Context, relative string, rules []fileIg
 	if relative != "" {
 		scope = relative + "/"
 	}
-	local, err := readFileIgnoreRules(ctx, filepath.Join(directory, ".gitignore"), scope)
+	local, err := readFileIgnoreRules(ctx, root, path.Join(directory, ".gitignore"), scope)
 	if err != nil {
 		return err
 	}
@@ -223,19 +268,12 @@ func (r *FileResolver) walk(ctx context.Context, relative string, rules []fileIg
 			continue
 		}
 		if entry.IsDir() {
-			if err := r.walk(ctx, name, rules, files); err != nil {
+			if err := r.walk(ctx, root, name, rules, files); err != nil {
 				return err
 			}
 			continue
 		}
-		info, err := entry.Info()
-		if err != nil {
-			if os.IsPermission(err) {
-				continue
-			}
-			return err
-		}
-		if info.Mode().IsRegular() {
+		if entry.Type().IsRegular() {
 			*files = append(*files, name)
 		}
 	}

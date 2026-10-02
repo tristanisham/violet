@@ -4,20 +4,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tristanisham/violet/protocol"
 	"gorm.io/gorm"
 )
 
-type ChatMessage struct {
-	Content string `json:"content"`
-	Role    string `json:"role"`
-}
+type ChatMessage = protocol.ChatMessage
 
 type ChatRequest struct {
-	Id        uuid.UUID     `json:"id" gorm:"type:text;primaryKey"`
-	Recipient string        `json:"recipient"`
-	Messages  []ChatMessage `json:"messages" gorm:"serializer:json;type:text"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"`
+	Id             uuid.UUID     `json:"id" gorm:"type:text;primaryKey"`
+	Recipient      string        `json:"recipient"`
+	AgentID        string        `json:"agent_id,omitempty"`
+	ConversationID string        `json:"conversation_id,omitempty"`
+	Messages       []ChatMessage `json:"messages" gorm:"serializer:json;type:text"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
 }
 
 func (r *ChatRequest) BeforeCreate(tx *gorm.DB) error {

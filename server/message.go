@@ -1,9 +1,12 @@
 package server
 
-import "github.com/tristanisham/violet/server/ai"
+import (
+	"github.com/tristanisham/violet/protocol"
+	"github.com/tristanisham/violet/server/ai"
+)
 
 type Message interface {
-	Subject() ai.Subject
+	Subject() protocol.Subject
 	Recipiant() string
 	Content() any
 }

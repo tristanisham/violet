@@ -3,6 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/tristanisham/violet/meta"
 	"github.com/tristanisham/violet/server"
@@ -15,34 +18,46 @@ import (
 // }
 
 func ServerStartHandler(ctx context.Context, c *opts.Command) error {
-	settings, ok := c.Root().Metadata["settings"].(*meta.Settings)
-	if !ok || settings == nil {
-		return meta.ErrStaleSettings
+	state, ok := c.Root().Metadata["state"].(*meta.State)
+	if !ok || state == nil {
+		return meta.ErrStaleState
 	}
 
 	s := server.NewEngine()
+	// --listen may be undefined on older command trees; String returns "" then.
+	if listen := c.String("listen"); listen != "" {
+		s.Addr = listen
+	}
 	c.Root().Metadata["server"] = s
 
-	if err := s.Start(settings); err != nil {
+	// Bind first so an invalid or refused --listen fails before the engine starts.
+	ln, err := s.Listen()
+	if err != nil {
+		return err
+	}
+	if err := s.Start(state); err != nil {
+		ln.Close()
 		return err
 	}
 	defer s.Stop()
-	return s.StartHttp(settings)
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return s.Serve(ctx, ln, state)
 }
 
 func ServerStatusHandler(ctx context.Context, c *opts.Command) error {
-	settings, ok := c.Root().Metadata["settings"].(*meta.Settings)
-	if !ok || settings == nil {
-		return meta.ErrStaleSettings
+	state, ok := c.Root().Metadata["state"].(*meta.State)
+	if !ok || state == nil {
+		return meta.ErrStaleState
 	}
 
 	return nil
 }
 
 func ServerStopHandler(ctx context.Context, c *opts.Command) error {
-	settings, ok := c.Root().Metadata["settings"].(*meta.Settings)
-	if !ok || settings == nil {
-		return meta.ErrStaleSettings
+	state, ok := c.Root().Metadata["state"].(*meta.State)
+	if !ok || state == nil {
+		return meta.ErrStaleState
 	}
 
 	s, ok := c.Root().Metadata["server"].(*server.Engine)

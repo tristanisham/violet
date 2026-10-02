@@ -26,7 +26,7 @@ func ReferenceList(title string, rows []Reference, width int, styles Styles) str
 	for _, row := range rows {
 		name := styles.Title.Width(nameWidth).Render(ansi.Truncate(row.Name, nameWidth, ""))
 		description := styles.Text.Width(descriptionWidth).Align(lipgloss.Right).Render(ansi.Truncate(row.Description, descriptionWidth, ""))
-		lines = append(lines, name+" "+description)
+		lines = append(lines, styles.Canvas.MaxWidth(width).MaxHeight(1).Render(name+" "+description))
 	}
 	return strings.Join(lines, "\n")
 }

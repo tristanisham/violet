@@ -98,7 +98,7 @@ func TestFileResolverNegationsAndDirectoryRules(t *testing.T) {
 		"sub/.gitignore": "!last.txt\n", "sub/last.txt": "",
 	})
 	assertFileCandidates(t, resolver, "", []string{
-		".gitignore", "allow/a.txt", "allow/deep/b.txt", "sub/.gitignore", "sub/last.txt", "sub/root-dir/a.go",
+		".gitignore", "sub/.gitignore", "sub/last.txt", "sub/root-dir/a.go",
 	})
 }
 
@@ -264,4 +264,31 @@ func TestFileResolverRefreshesIgnores(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFileCandidates(t, resolver, "*.go", []string{})
+}
+
+func TestFileResolverIgnorePatternSyntax(t *testing.T) {
+	resolver, _ := fileResolverFixture(t, map[string]string{
+		".gitignore": "file?.txt\n leading.txt\ntrailing\\ \n(a).txt\n\\#secret\n\\!secret\n",
+		"file1.txt":  "", "file12.txt": "", " leading.txt": "", "leading.txt": "",
+		"trailing ": "", "trailing": "", "(a).txt": "", "a.txt": "",
+		"#secret": "", "!secret": "",
+	})
+	assertFileCandidates(t, resolver, "", []string{".gitignore", "a.txt", "file12.txt", "leading.txt", "trailing"})
+}
+
+func TestFileResolverRejectsReplacedRoot(t *testing.T) {
+	resolver, root := fileResolverFixture(t, map[string]string{"inside.go": ""})
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "outside.go"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, root); err != nil {
+		t.Fatal(err)
+	}
+	if files, err := resolver.Candidates(context.Background(), ""); err == nil {
+		t.Fatalf("followed replaced root: %v", files)
+	}
 }
