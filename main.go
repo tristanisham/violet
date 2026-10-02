@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -139,13 +140,13 @@ func configPath(c *opts.Command) (string, error) {
 
 // startTUI connects the TUI to a remote server (--server), to an in-process
 // engine for the project's violet.toml, or runs it offline without a config.
-func startTUI(c *opts.Command) error {
+func startTUI(c *opts.Command) (err error) {
 	if url := c.String("server"); url != "" {
 		remote, err := client.NewHTTP(url, os.Getenv("VIOLET_SERVER_TOKEN"))
 		if err != nil {
 			return err
 		}
-		defer remote.Close()
+		defer func() { err = errors.Join(err, remote.Close()) }()
 		return ui.Start(remote)
 	}
 
@@ -169,13 +170,24 @@ func startTUI(c *opts.Command) error {
 	}
 	defer engine.Stop()
 	local := server.NewLocalClient(engine)
-	defer local.Close()
+	defer func() { err = errors.Join(err, local.Close()) }()
 	return ui.Start(local)
 }
 
-func main() {
-	if err := App.Run(context.Background(), os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+// exitCode reports err the way the error asks to be reported and returns the
+// process exit status. Handler-directive errors are only debug-logged.
+func exitCode(w io.Writer, err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, meta.ErrFailQuietly):
+		log.Debug("failing quietly", "error", err)
+	default:
+		meta.CtaFatal(w, err)
 	}
+	return 1
+}
+
+func main() {
+	os.Exit(exitCode(os.Stderr, App.Run(context.Background(), os.Args)))
 }

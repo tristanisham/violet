@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -28,7 +29,8 @@ func InitHandler(ctx context.Context, c *opts.Command) error {
 	file, err := os.OpenFile(configPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if errors.Is(err, os.ErrExist) {
 		log.Warnf("config file already present (%s)... skipping", configPath)
-		return nil
+		// The warning is the user-facing output; exit non-zero without repeating it.
+		return fmt.Errorf("%w: %w", meta.ErrFailQuietly, err)
 	}
 	if err != nil {
 		return err
