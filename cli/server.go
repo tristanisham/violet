@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/tristanisham/violet/meta"
 	"github.com/tristanisham/violet/server"
@@ -20,6 +21,8 @@ func ServerStartHandler(ctx context.Context, c *opts.Command) error {
 	}
 
 	s := server.NewServer()
+	c.Root().Metadata["server"] = s
+
 	return s.Start(settings)
 }
 
@@ -38,5 +41,12 @@ func ServerStopHandler(ctx context.Context, c *opts.Command) error {
 		return meta.ErrStaleSettings
 	}
 
+	s, ok := c.Root().Metadata["server"].(*server.Server)
+	if !ok || s == nil {
+		return fmt.Errorf("no server running in this process")
+	}
+
+	s.Stop()
+	delete(c.Root().Metadata, "server")
 	return nil
 }
