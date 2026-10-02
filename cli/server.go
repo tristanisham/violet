@@ -23,7 +23,11 @@ func ServerStartHandler(ctx context.Context, c *opts.Command) error {
 	s := server.NewServer()
 	c.Root().Metadata["server"] = s
 
-	return s.Start(settings)
+	if err := s.Start(settings); err != nil {
+		return err
+	}
+	defer s.Stop()
+	return s.StartHttp(settings)
 }
 
 func ServerStatusHandler(ctx context.Context, c *opts.Command) error {
@@ -41,7 +45,7 @@ func ServerStopHandler(ctx context.Context, c *opts.Command) error {
 		return meta.ErrStaleSettings
 	}
 
-	s, ok := c.Root().Metadata["server"].(*server.Server)
+	s, ok := c.Root().Metadata["server"].(*server.Engine)
 	if !ok || s == nil {
 		return fmt.Errorf("no server running in this process")
 	}

@@ -4,8 +4,10 @@ type Subject int
 
 const (
 	SubjectUnknown Subject = iota
+	SubjectChat
 )
 
-type Message struct {
-	Subject Subject
+type Message interface {
+	Subject() Subject
+	Content() any
 }
